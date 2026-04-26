@@ -1,0 +1,107 @@
+name: GuppyNodes Auto Renew
+
+on:
+  schedule:
+    # 每天 UTC 02:00 运行（北京时间 10:00）
+    - cron: "0 2 */26 * *"
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout（用于拉取当前仓库文件，如需私有脚本可跳过） ──
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. 安装 GOST（SOCKS5 → HTTP 代理转换） ─────────────────
+      - name: Install GOST v2.11.5
+        run: |
+          wget -q https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
+          gunzip gost-linux-amd64-2.11.5.gz
+          chmod +x gost-linux-amd64-2.11.5
+          sudo mv gost-linux-amd64-2.11.5 /usr/local/bin/gost
+          gost -V
+
+      # ── 3. 启动 GOST：SOCKS5 → 本地 HTTP 代理 ─────────────────
+      #    GUPPY_PROXY_NODE 格式: socks5://user:pass@host:port
+      #    GOST 将其转换为本地 HTTP 代理 127.0.0.1:8080
+      - name: Start GOST HTTP proxy
+        if: ${{ secrets.GUPPY_PROXY_NODE != '' }}
+        env:
+          PROXY_NODE: ${{ secrets.GUPPY_PROXY_NODE }}
+        run: |
+          gost -L http://127.0.0.1:8080 -F "$PROXY_NODE" &
+          sleep 3
+          echo "GOST started, HTTP proxy at 127.0.0.1:8080"
+          # 验证代理可用
+          curl -s --proxy http://127.0.0.1:8080 --max-time 10 https://www.google.com -o /dev/null \
+            && echo "Proxy OK" || echo "Proxy check failed (continuing anyway)"
+
+      # ── 4. 安装系统依赖（Xvfb + Chrome 依赖）─────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            xvfb \
+            x11-utils \
+            libgconf-2-4 \
+            libxss1 \
+            libnss3 \
+            libatk-bridge2.0-0 \
+            libgtk-3-0 \
+            libasound2 \
+            xdotool \
+            --no-install-recommends
+
+      # ── 5. 安装 Python 依赖 ────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python packages
+        run: |
+          pip install --quiet \
+            seleniumbase \
+            requests
+
+      # ── 6. 安装 SeleniumBase 所需的 Chrome/ChromeDriver ───────
+      - name: Install Chrome (UC Mode)
+        run: |
+          seleniumbase install uc
+          # 确保 chromedriver 可用
+          python -c "from seleniumbase import SB; print('SB OK')"
+
+      # ── 7. 启动 Xvfb 虚拟显示（UC Mode 必须非 headless）─────
+      - name: Start Xvfb
+        run: |
+          Xvfb :99 -screen 0 1366x768x24 -ac &
+          sleep 2
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      # ── 8. 运行续期脚本 ────────────────────────────────────────
+      - name: Run GuppyNodes renew script
+        env:
+          DISPLAY: ":99"
+          GUPPY_EMAIL:    ${{ secrets.GUPPY_EMAIL }}
+          GUPPY_PASSWORD: ${{ secrets.GUPPY_PASSWORD }}
+          TG_BOT_TOKEN:   ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID:     ${{ secrets.TG_CHAT_ID }}
+          # 如果设置了代理，则传入；否则留空（不走代理）
+          GOST_HTTP_PROXY: ${{ secrets.GUPPY_PROXY_NODE != '' && 'http://127.0.0.1:8080' || '' }}
+        run: |
+          python guppynodes_renew.py
+
+      # ── 9. 上传截图（失败时便于排查）─────────────────────────
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ github.run_id }}
+          path: |
+            *.png
+            /tmp/*.png
+          retention-days: 3
