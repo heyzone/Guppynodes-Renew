@@ -57,12 +57,11 @@ jobs:
           sudo apt-get install -y -qq \
             xvfb \
             x11-utils \
-            libgconf-2-4 \
             libxss1 \
             libnss3 \
             libatk-bridge2.0-0 \
             libgtk-3-0 \
-            libasound2 \
+            libasound2t64 \
             xdotool \
             --no-install-recommends
 
