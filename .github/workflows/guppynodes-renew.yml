@@ -16,6 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Guppynodes-auto
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: scripts
+      
+      
       # ── 2. 安装 GOST（SOCKS5 → HTTP 代理转换） ─────────────────
       - name: Install GOST v2.11.5
         run: |
@@ -93,7 +101,7 @@ jobs:
           # 如果设置了代理，则传入；否则留空（不走代理）
           GOST_HTTP_PROXY: ${{ secrets.GUPPY_PROXY_NODE != '' && 'http://127.0.0.1:8080' || '' }}
         run: |
-          python guppynodes_renew.py
+          python scripts/guppynodes_renew.py
 
       # ── 9. 上传截图（失败时便于排查）─────────────────────────
       - name: Upload screenshots on failure
