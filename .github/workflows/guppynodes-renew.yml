@@ -77,10 +77,11 @@ jobs:
             seleniumbase \
             requests
 
-      # ── 7. 安装 Chrome（UC Mode）──────────────────────────────
-      - name: Install Chrome (UC Mode)
+      # ── 7. 安装 ChromeDriver（UC Mode）───────────────────────
+      - name: Install ChromeDriver for UC Mode
         run: |
-          seleniumbase install uc
+          sbase get uc_driver
+          sbase get chromedriver
           python -c "from seleniumbase import SB; print('SB OK')"
 
       # ── 8. 启动 Xvfb ──────────────────────────────────────────
